@@ -1,326 +1,810 @@
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mission to Gaia BH1 — Multi-Pass Oberth Simulator</title>
 <style>
-* { box-sizing: border-box; }
-#wrap { background: #07090f; border-radius: 12px; overflow: hidden; }
-canvas { display: block; width: 100%; }
-#controls { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #0d1117; border-top: 0.5px solid #1e2430; }
-#phase-box { background: #0d1117; border-top: 0.5px solid #1e2430; padding: 10px 14px; }
-.phase-title { font: 500 13px sans-serif; color: #e2e8f0; margin: 0 0 2px; }
-.phase-desc  { font: 400 11px sans-serif; color: #7a8499; margin: 0; }
-button { background: transparent; border: 0.5px solid #2a3448; color: #c4cde0; font: 400 12px sans-serif; padding: 5px 14px; border-radius: 6px; cursor: pointer; }
-button:hover { background: #1a2235; }
-.stat { font: 400 11px sans-serif; color: #7a8499; }
-.stat b { color: #c4cde0; font-weight: 500; }
-#spd { margin-left: auto; }
-</style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #02030d;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #c8d4e8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 16px;
+}
+h1 {
+  font-size: 15px;
+  font-weight: 500;
+  color: #6688aa;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.subtitle {
+  font-size: 11px;
+  color: #2a3a55;
+  text-align: center;
+  margin-bottom: 12px;
+  letter-spacing: .06em;
+}
+#outer { width: 100%; max-width: 900px; }
 
-<div id="wrap">
-<canvas id="c" height="480"></canvas>
-<div id="controls">
-  <button id="btnPlay">Pause</button>
-  <button id="btnReset">Reset</button>
-  <span class="stat">Phase: <b id="phaseName">Launch</b></span>
-  <span class="stat" id="spd">Speed: <b id="spdVal">—</b></span>
-</div>
-<div id="phase-box">
-  <p class="phase-title" id="phaseTitle">Launching from Earth</p>
-  <p class="phase-desc"  id="phaseDesc">Initial velocity ~12 km/s after escape burn. Heading toward Venus for gravity assist.</p>
-</div>
+/* CANVAS */
+#canvas-wrap {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 0.5px solid #1a2540;
+  background: #02030d;
+}
+canvas { display: block; width: 100%; }
+
+/* HUD */
+#hud {
+  position: absolute;
+  top: 10px; left: 12px;
+  display: flex; flex-direction: column; gap: 5px;
+  pointer-events: none;
+}
+.hud-pill {
+  background: rgba(2,4,18,0.82);
+  border: 0.5px solid rgba(80,130,200,0.2);
+  border-radius: 7px;
+  padding: 4px 9px;
+  font-size: 11px;
+  color: #5a7a9a;
+}
+.hud-pill b { color: #c0d4f0; font-weight: 500; }
+#hud-oberth {
+  display: none;
+  background: rgba(20,4,4,0.90);
+  border: 0.5px solid rgba(255,80,40,0.35);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 11px;
+  color: #ff8866;
+}
+#hud-oberth b { color: #ffcc88; }
+
+/* SPEED GAUGE */
+#gauge {
+  position: absolute;
+  top: 10px; right: 12px;
+  background: rgba(2,4,18,0.85);
+  border: 0.5px solid rgba(80,130,200,0.2);
+  border-radius: 10px;
+  padding: 8px 14px;
+  text-align: right;
+  pointer-events: none;
+  min-width: 110px;
+}
+#gauge .spd { font-size: 20px; font-weight: 600; color: #4af0a8; line-height: 1; }
+#gauge .unit { font-size: 10px; color: #3a6a5a; }
+#gauge .pct  { font-size: 10px; color: #3a5a7a; margin-top: 2px; }
+
+/* PROGRESS BAR */
+#prog-wrap { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,0.04); }
+#prog-bar  { height: 100%; background: linear-gradient(90deg,#1a3a88,#44ccaa); width: 0%; }
+
+/* CONTROLS */
+#controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  background: #050a14;
+  border-top: 0.5px solid #0d1828;
+  border-radius: 0 0 14px 14px;
+}
+button {
+  background: rgba(255,255,255,0.04);
+  border: 0.5px solid #1e2e48;
+  color: #7a9ab8;
+  font-size: 12px;
+  padding: 5px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background .15s;
+}
+button:hover { background: rgba(255,255,255,0.09); color: #c8daf0; }
+.sep { width: 0.5px; height: 20px; background: #1a2a40; flex-shrink: 0; }
+#phase-label { margin-left: auto; font-size: 11px; color: #2a4060; }
+#phase-label span { color: #4a7ab0; }
+
+/* PHASE PANEL */
+#phase-panel {
+  background: #050a14;
+  border: 0.5px solid #0d1828;
+  border-top: none;
+  padding: 10px 16px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.ph-num { font-size: 26px; font-weight: 700; color: #1a2a50; line-height: 1; min-width: 28px; }
+.ph-title { font-size: 13px; font-weight: 500; color: #c0d2ec; margin-bottom: 3px; }
+.ph-desc  { font-size: 11px; color: #4a6a88; line-height: 1.55; }
+
+/* TIMELINE */
+#timeline {
+  display: flex;
+  gap: 4px;
+  padding: 8px 14px 0;
+  background: #050a14;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.tl-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #0f1a28;
+  border: 0.5px solid #1a2a3c;
+  transition: background .2s;
+}
+.tl-dot.done   { background: #1a3a88; }
+.tl-dot.active { background: #44ccaa; box-shadow: 0 0 5px #44ccaa66; }
+.tl-dot.bh     { border-color: #441010; }
+.tl-dot.bh.done { background: #661818; }
+.tl-dot.bh.active { background: #ff4422; box-shadow: 0 0 6px #ff442266; }
+.tl-arrow { font-size: 10px; color: #1a2a40; margin: 0 1px; }
+
+/* LEGEND */
+#legend {
+  display: flex;
+  gap: 12px;
+  padding: 7px 14px;
+  background: #050a14;
+  border-top: 0.5px solid #0b1520;
+  flex-wrap: wrap;
+  border-radius: 0 0 14px 14px;
+}
+.leg { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #3a5570; }
+.leg-line { width: 16px; height: 2px; border-radius: 1px; }
+
+/* FACT BOX */
+#factbox {
+  margin-top: 12px;
+  background: #050a14;
+  border: 0.5px solid #0d1828;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.fact-label { font-size: 10px; color: #2a4060; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 3px; }
+.fact-value { font-size: 13px; color: #88aacc; font-weight: 500; }
+.fact-note  { font-size: 10px; color: #2a4060; margin-top: 1px; }
+</style>
+</head>
+<body>
+<div id="outer">
+  <h1>Mission Trajectory — Gaia BH1 Interstellar Probe · Multi-Pass Oberth</h1>
+  <div class="subtitle">School Science Project · Gaia BH1 · 1,560 light-years · 9.62 M☉ · r_s ≈ 28 km · 3× Oberth passes at BH</div>
+
+  <div id="canvas-wrap">
+    <canvas id="c"></canvas>
+    <div id="hud">
+      <div class="hud-pill">Mission year: <b id="hudYear">0.0</b></div>
+      <div class="hud-pill">Distance from Sun: <b id="hudDist">1.0 AU</b></div>
+      <div class="hud-pill" id="hudPhase">Phase: <b>Launch</b></div>
+      <div id="hud-oberth">⚫ BH Oberth Pass <b id="hudPassNum">1</b>/3 &nbsp;|&nbsp; v∞: <b id="hudVinf">380</b> → <b id="hudVout">4,200</b> km/s</div>
+    </div>
+    <div id="gauge">
+      <div class="spd" id="gaugeSpd">30</div>
+      <div class="unit" id="gaugeUnit">km/s</div>
+      <div class="pct" id="gaugePct">0.010% of c</div>
+    </div>
+    <div id="prog-wrap"><div id="prog-bar"></div></div>
+  </div>
+
+  <div id="controls">
+    <button id="btnPlay">⏸ Pause</button>
+    <button id="btnReset">↺ Reset</button>
+    <div class="sep"></div>
+    <span id="phase-label">Phase: <span id="phaseLbl">Launch</span></span>
+  </div>
+
+  <div id="timeline"></div>
+
+  <div id="phase-panel">
+    <div class="ph-num" id="phNum">01</div>
+    <div>
+      <div class="ph-title" id="phTitle">Launch from Earth</div>
+      <div class="ph-desc"  id="phDesc">Escape burn Δv ≈ 3.2 km/s. Craft departs toward Venus for gravity assist. Speed ~30 km/s.</div>
+    </div>
+  </div>
+
+  <div id="legend">
+    <div class="leg"><div class="leg-line" style="background:#4a9eff"></div>Outbound / Return</div>
+    <div class="leg"><div class="leg-line" style="background:#ffe566"></div>Oberth (Sun)</div>
+    <div class="leg"><div class="leg-line" style="background:#44ccaa"></div>Jupiter slingshot</div>
+    <div class="leg"><div class="leg-line" style="background:#cc55ff"></div>Interstellar</div>
+    <div class="leg"><div class="leg-line" style="background:#ff3322"></div>BH Oberth pass ⚫</div>
+    <div class="leg"><div class="leg-line" style="background:#ff8855"></div>BH elliptic orbit</div>
+    <div class="leg"><div class="leg-line" style="background:#aaffcc"></div>Mag-sail brake</div>
+    <div style="margin-left:auto;font-size:10px;color:#1a2a3a">Not to scale · BH region compressed</div>
+  </div>
+
+  <div id="factbox">
+    <div class="fact">
+      <div class="fact-label">Target: Gaia BH1</div>
+      <div class="fact-value">1,560 light-years</div>
+      <div class="fact-note">Nearest known stellar-mass black hole</div>
+    </div>
+    <div class="fact">
+      <div class="fact-label">BH mass · r_s</div>
+      <div class="fact-value">9.62 M☉ · 28 km</div>
+      <div class="fact-note">ISCO = 3 r_s = 84 km · no accretion disk</div>
+    </div>
+    <div class="fact">
+      <div class="fact-label">Periapsis speed</div>
+      <div class="fact-value">~0.577c</div>
+      <div class="fact-note">v_esc at 3 r_s = √(c²/3) = 173,000 km/s</div>
+    </div>
+    <div class="fact">
+      <div class="fact-label">Multi-pass Oberth</div>
+      <div class="fact-value">3 × Δv = 50 km/s</div>
+      <div class="fact-note">150 km/s of fuel → 7,200 km/s exit (48× gain)</div>
+    </div>
+    <div class="fact">
+      <div class="fact-label">Final exit speed</div>
+      <div class="fact-value">~7,200 km/s</div>
+      <div class="fact-note">2.4% of c after 3 BH Oberth passes</div>
+    </div>
+    <div class="fact">
+      <div class="fact-label">Return travel time</div>
+      <div class="fact-value">~65,000 years</div>
+      <div class="fact-note">At 7,200 km/s across 1,560 ly (vs 1.2M at 380 km/s)</div>
+    </div>
+  </div>
 </div>
 
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-
-const W = 680, H = 480;
+const W = 900, H = 540;
 canvas.width = W; canvas.height = H;
-const cx = W/2, cy = H/2;
 
-const AU = 46;
-const r = { sun:10, mercury:2.5, venus:4, earth:4.5, mars:3.5, jupiter:14 };
-const orb = { venus:0.72*AU, earth:1*AU, mars:1.52*AU, jupiter:4.8*AU };
-const col = { venus:'#e8c56b', earth:'#4a9eff', mars:'#d4613a', jupiter:'#c8a97a', sun:'#ffe566' };
+const cx = W * 0.38, cy = H * 0.52;
+const AU = 48;
+const orb = { venus: 0.72*AU, earth: AU, mars: 1.52*AU, jupiter: 5.0*AU };
 
-const phases = [
-  { name:'Launch',          title:'1. Launch from Earth',           desc:'Escape burn ~3.2 km/s. Craft heads to Venus on a Hohmann-like arc. Speed ~30 km/s relative to Sun.',   speed:'~30 km/s' },
-  { name:'Venus flyby',     title:'2. Venus gravity assist',        desc:'Fly behind Venus. Planet\'s gravity bends the trajectory inward, lowering perihelion toward the Sun.',   speed:'~35 km/s' },
-  { name:'Fall to Sun',     title:'3. Falling toward the Sun',      desc:'Gravity accelerates the craft to ~240 km/s at closest approach (7 million km from Sun surface).',        speed:'~240 km/s' },
-  { name:'Oberth #1',       title:'4. Oberth maneuver #1 at Sun',   desc:'Engine fires Δv = 5 km/s at perihelion. Exponential amplification: effective gain ~30 km/s.',           speed:'~270 km/s' },
-  { name:'To Jupiter',      title:'5. Transfer to Jupiter',         desc:'High-energy arc out to Jupiter (5.2 AU). Travel time ~20 months. Speed drops as craft climbs gravity well.', speed:'~18 km/s' },
-  { name:'Jupiter flyby 1', title:'6. Jupiter gravity assist #1',   desc:'Fly behind Jupiter. Gain Δv ≈ 5–10 km/s from the planet\'s enormous gravity well.',                     speed:'~25 km/s' },
-  { name:'Return to Sun',   title:'7. Return to Sun for Oberth #2', desc:'Craft dives back to inner solar system. Accelerates to ~240 km/s again in perihelion.',                  speed:'~240 km/s' },
-  { name:'Oberth #2',       title:'8. Oberth maneuver #2 at Sun',   desc:'Second engine burn at perihelion. Another ~30 km/s effective gain. Total now exceeds 300 km/s.',         speed:'~300 km/s' },
-  { name:'Jupiter flyby 2', title:'9. Jupiter gravity assist #2',   desc:'Second Jupiter flyby adds ~5–10 km/s more. Craft now on hyperbolic escape trajectory.',                  speed:'~320 km/s' },
-  { name:'Exit',            title:'10. Interstellar exit',          desc:'Final speed ~320–400 km/s. Craft escapes solar system. Heading toward Gaia BH1 (~1,600 light-years away).', speed:'~350 km/s' },
+// ── REAL GAIA BH1 DATA ─────────────────────────────────────────────
+// Mass: 9.62 M☉  |  r_s = 2GM/c² ≈ 28.4 km  |  ISCO = 3 r_s ≈ 85 km
+// v_escape at 3 r_s = √(c²/3) ≈ 0.577c ≈ 173,000 km/s
+// Oberth: v_inf_out = √(v_peri_new² − v_esc²)
+// Pass 1: 380 km/s in → burn 50 km/s → ~4,200 km/s out
+// Pass 2: 4,200 km/s in → burn 50 km/s → ~5,900 km/s out
+// Pass 3: 5,900 km/s in → burn 50 km/s → ~7,200 km/s out
+// ───────────────────────────────────────────────────────────────────
+
+// BH position — upper-right region
+const bhX = W * 0.73;  // 657
+const bhY = H * 0.38;  // 205
+const rFly = 24;       // visual periapsis radius (represents 3 r_s)
+
+// BH arc endpoints (computed once)
+function bhPt(a) { return { x: bhX + rFly*Math.cos(a), y: bhY + rFly*Math.sin(a) }; }
+
+// Pass angles (all arcs go with increasing angle = CW on canvas since y is down)
+const P1_A0 = 2.8, P1_A1 = 6.0;   // Pass 1: sweep 3.2 rad = 183°
+const P2_A0 =-0.8, P2_A1 = 2.4;   // Pass 2: sweep 3.2 rad = 183°
+const P3_A0 =-3.27,P3_A1 = 1.09;  // Pass 3: sweep 4.36 rad = 250°
+
+const p1entry = bhPt(P1_A0);
+const p1exit  = bhPt(P1_A1);
+const p2entry = bhPt(P2_A0);
+const p2exit  = bhPt(P2_A1);
+const p3entry = bhPt(P3_A0);
+const p3exit  = bhPt(P3_A1);
+
+// Key positions
+const ea  = { x: cx + orb.earth   * Math.cos(-0.2),  y: cy + orb.earth   * Math.sin(-0.2) };
+const va  = { x: cx + orb.venus   * Math.cos(-1.7),  y: cy + orb.venus   * Math.sin(-1.7) };
+const j1  = { x: cx + orb.jupiter * Math.cos(0.8),   y: cy + orb.jupiter * Math.sin(0.8)  };
+const j2  = { x: cx + orb.jupiter * Math.cos(2.5),   y: cy + orb.jupiter * Math.sin(2.5)  };
+const sun = { x: cx, y: cy };
+const exitPt   = { x: cx - 150, y: cy - 150 };
+const returnPt = { x: cx - 100, y: cy - 90  };
+const earthReturn = { x: ea.x + 10, y: ea.y - 10 };
+
+// ── 19 MISSION PHASES ──────────────────────────────────────────────
+const PHASES = [
+  /* 00 */ { name:'Launch',          title:'1. Launch from Earth',                        col:'#4a9eff', speed:30,
+    desc:'Δv ≈ 3.2 km/s escape burn. Craft heads toward Venus for gravity assist. Speed ~30 km/s relative to the Sun.' },
+  /* 01 */ { name:'Venus flyby',     title:'2. Venus gravity assist',                     col:'#e8c56b', speed:38,
+    desc:'Swing behind Venus at ~300 km altitude. Gravity bends trajectory sunward — perihelion drops toward the Sun. No fuel used.' },
+  /* 02 */ { name:'Fall to Sun',     title:'3. Falling toward the Sun',                   col:'#ffaa22', speed:200,
+    desc:'Sun\'s gravity accelerates craft to ~200 km/s at perihelion (0.046 AU). Thermal shield active. Kinetic energy building.' },
+  /* 03 */ { name:'Oberth #1',       title:'4. Oberth maneuver #1  🔥',                   col:'#ffe566', speed:270,
+    desc:'NTP engine fires Δv = 5 km/s at closest point to Sun. Oberth amplification: ΔE = v·Δv → ~30 km/s effective gain. Total ≈ 270 km/s.' },
+  /* 04 */ { name:'To Jupiter',      title:'5. Transfer to Jupiter',                      col:'#44ccaa', speed:22,
+    desc:'High-energy arc to Jupiter (5.2 AU). ~20 months travel. Craft decelerates climbing the solar gravity well. AI navigation active.' },
+  /* 05 */ { name:'Jupiter GA 1',    title:'6. Jupiter gravity assist #1',                col:'#c8a97a', speed:290,
+    desc:'Swing behind Jupiter at ~50,000 km. Gain ~10 km/s. Total ≈ 290 km/s. Jupiter\'s enormous gravity bends trajectory outward.' },
+  /* 06 */ { name:'Return to Sun',   title:'7. Dive back to the Sun',                     col:'#ffaa22', speed:230,
+    desc:'Craft loops back to perihelion. Accelerates again to ~240 km/s. Heat shield reactivated. ~22 months from Jupiter.' },
+  /* 07 */ { name:'Oberth #2',       title:'8. Oberth maneuver #2  🔥',                   col:'#ffe566', speed:320,
+    desc:'Second NTP burn at perihelion adds another ~30 km/s. Running total > 320 km/s. Last close pass to the Sun.' },
+  /* 08 */ { name:'Jupiter GA 2',    title:'9. Jupiter gravity assist #2',                col:'#c8a97a', speed:340,
+    desc:'Second Jupiter flyby adds ~5–10 km/s. Craft now on hyperbolic escape trajectory. Speed ≈ 340 km/s.' },
+  /* 09 */ { name:'Interstellar',    title:'10. Interstellar cruise to Gaia BH1',         col:'#cc55ff', speed:380,
+    desc:'Final NTP burn exits solar system at ~380 km/s (0.127% c). AI hibernates. 1,560 light-years to Gaia BH1. ETA ~1.2 million years.' },
+  /* 10 */ { name:'BH approach',     title:'11. Approaching Gaia BH1  ⚫',                col:'#ff6644', speed:420,
+    desc:'Gravity of Gaia BH1 (9.62 M☉) pulls craft inward. Escape velocity at periapsis (3 r_s): v_esc = √(c²/3) ≈ 0.577c = 173,000 km/s. Craft falling into deep gravity well.' },
+  /* 11 */ { name:'BH Pass 1  🔥',  title:'12. BH Oberth Pass #1  ⚫🔥',                 col:'#ff3322', speed:173000,
+    desc:'Periapsis at 3 r_s = 84 km. Speed peaks at ~0.577c = 173,000 km/s! NTP fires Δv = 50 km/s at periapsis. Oberth effect: v∞ jumps 380 → 4,200 km/s. Gravitational redshift at maximum. Tidal forces: 1,000× Earth gravity.' },
+  /* 12 */ { name:'BH Orbit 1',     title:'13. Elliptical orbit — return for Pass #2',   col:'#ff8855', speed:4200,
+    desc:'After Pass 1: v∞ = 4,200 km/s. Craft on elongated elliptical orbit around Gaia BH1. Returns to periapsis for second Oberth burn. Each pass multiplies the exit speed using BH\'s gravity well.' },
+  /* 13 */ { name:'BH Pass 2  🔥',  title:'14. BH Oberth Pass #2  ⚫🔥',                 col:'#ff3322', speed:173100,
+    desc:'Second periapsis at 3 r_s. Speed again peaks at ~0.578c. Another Δv = 50 km/s burn. v∞ jumps 4,200 → 5,900 km/s. Cumulative Oberth gain: 15× the input Δv. Orbital energy building with each pass.' },
+  /* 14 */ { name:'BH Orbit 2',     title:'15. Elliptical orbit — return for Pass #3',   col:'#ff8855', speed:5900,
+    desc:'After Pass 2: v∞ = 5,900 km/s (2.0% of c). Craft on even more elongated orbit. Third periapsis pass will provide the final boost. The orbit apoapsis has grown enormously after each burn.' },
+  /* 15 */ { name:'BH Pass 3  🔥',  title:'16. BH Oberth Pass #3 — Final Exit  ⚫🔥',   col:'#ffaa22', speed:173200,
+    desc:'Final periapsis at 3 r_s. Speed peaks at ~0.578c again. Last burn Δv = 50 km/s. v∞ exits at ~7,200 km/s (2.4% c). Total: 150 km/s of fuel → 7,200 km/s exit speed. 48× amplification by Oberth effect at Gaia BH1!' },
+  /* 16 */ { name:'Return cruise',  title:'17. Return cruise toward Earth',               col:'#44aaff', speed:7200,
+    desc:'Craft leaves Gaia BH1 at ~7,200 km/s (2.4% c). Return ETA: ~65,000 years (vs 1.2M years outbound). AI awakens. Laser relay transmits compressed science data. Gravitational redshift, tidal data, and extreme time dilation recorded at 3 r_s.' },
+  /* 17 */ { name:'Mag-sail brake', title:'18. Magnetic sail braking',                   col:'#aaffcc', speed:500,
+    desc:'Superconducting magnetic sail (50 km diameter) deploys. Drag on solar wind + interstellar medium decelerates craft from ~7,200 to ~500 km/s over decades. No propellant required.' },
+  /* 18 */ { name:'Earth return',   title:'19. Earth orbital insertion',                  col:'#4a9eff', speed:11,
+    desc:'Final deceleration using aerobraking + residual propellant. Data capsule re-enters. 3× Oberth passes confirmed: 150 km/s of fuel yielded 7,200 km/s exit velocity — a 48× amplification by the Gaia BH1 gravity well.' },
 ];
 
-const pathPts = [];
-function buildPath() {
-  pathPts.length = 0;
-  const steps = 1200;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    pathPts.push(getPos(t));
-  }
+// ── TIMELINE ──────────────────────────────────────────────────────
+const tlEl = document.getElementById('timeline');
+PHASES.forEach((p, i) => {
+  if (i > 0) { const arr = document.createElement('div'); arr.className='tl-arrow'; arr.textContent='›'; tlEl.appendChild(arr); }
+  const d = document.createElement('div');
+  const isBH = (i >= 11 && i <= 15);
+  d.className = 'tl-dot' + (isBH ? ' bh' : '');
+  d.id = 'tl'+i; d.title = p.name;
+  tlEl.appendChild(d);
+});
+
+// ── BEZIER HELPER ─────────────────────────────────────────────────
+function bez(t, x0,y0,x1,y1,x2,y2,x3,y3) {
+  const u=1-t;
+  return { x:u*u*u*x0+3*u*u*t*x1+3*u*t*t*x2+t*t*t*x3,
+           y:u*u*u*y0+3*u*u*t*y1+3*u*t*t*y2+t*t*t*y3 };
 }
 
-function getPos(t) {
-  if (t < 0.08) {
-    const u = t / 0.08;
-    const ea = -Math.PI*0.15;
-    const sx = cx + orb.earth * Math.cos(ea);
-    const sy = cy + orb.earth * Math.sin(ea);
-    const va = -Math.PI*0.55;
-    const vx = cx + orb.venus * Math.cos(va);
-    const vy = cy + orb.venus * Math.sin(va);
-    return bezier3(u, sx, sy, sx-20, sy-60, vx+30, vy+40, vx, vy);
-  }
-  if (t < 0.16) {
-    const u = (t-0.08)/0.08;
-    const va = -Math.PI*0.55;
-    const vx = cx + orb.venus * Math.cos(va);
-    const vy = cy + orb.venus * Math.sin(va);
-    return bezier3(u, vx, vy, vx-15, vy-20, cx+8, cy-6, cx+4, cy-3);
-  }
-  if (t < 0.18) {
-    const u = (t-0.16)/0.02;
-    const x = cx + 4*(1-u);
-    const y = cy - 3*(1-u);
-    return {x, y};
-  }
-  if (t < 0.35) {
-    const u = (t-0.18)/0.17;
-    const ja = Math.PI*0.25;
-    const jx = cx + orb.jupiter * Math.cos(ja);
-    const jy = cy + orb.jupiter * Math.sin(ja);
-    return bezier3(u, cx, cy, cx+80, cy+40, jx-60, jy-40, jx, jy);
-  }
-  if (t < 0.52) {
-    const u = (t-0.35)/0.17;
-    const ja = Math.PI*0.25;
-    const jx = cx + orb.jupiter * Math.cos(ja);
-    const jy = cy + orb.jupiter * Math.sin(ja);
-    return bezier3(u, jx, jy, jx+50, jy+60, cx+30, cy+10, cx+5, cy+2);
-  }
-  if (t < 0.54) {
-    const u = (t-0.52)/0.02;
-    const x = cx + 5*(1-u);
-    const y = cy + 2*(1-u);
-    return {x, y};
-  }
-  if (t < 0.72) {
-    const u = (t-0.54)/0.18;
-    const ja = Math.PI*0.85;
-    const jx = cx + orb.jupiter * Math.cos(ja);
-    const jy = cy + orb.jupiter * Math.sin(ja);
-    return bezier3(u, cx, cy, cx-60, cy+50, jx+50, jy-30, jx, jy);
-  }
-  const u = (t-0.72)/0.28;
-  const ja = Math.PI*0.85;
-  const jx = cx + orb.jupiter * Math.cos(ja);
-  const jy = cy + orb.jupiter * Math.sin(ja);
-  const ex = cx + (-220);
-  const ey = cy + 180;
-  return bezier3(u, jx, jy, jx-80, jy+60, ex-40, ey-30, ex, ey);
-}
+// ── FULL PATH FUNCTION ────────────────────────────────────────────
+// t segments:
+// 0.00–0.07  Earth→Venus       0.59–0.67  Interstellar cruise
+// 0.07–0.14  Venus→Sun         0.67–0.73  BH approach
+// 0.14–0.16  Oberth #1         0.73–0.76  BH Pass 1
+// 0.16–0.31  Sun→Jupiter 1     0.76–0.80  BH Orbit 1
+// 0.31–0.33  Jupiter GA 1      0.80–0.83  BH Pass 2
+// 0.33–0.45  Jupiter 1→Sun     0.83–0.87  BH Orbit 2
+// 0.45–0.47  Oberth #2         0.87–0.91  BH Pass 3
+// 0.47–0.58  Sun→Jupiter 2     0.91–0.95  Return cruise
+// 0.58–0.59  Jupiter GA 2      0.95–0.97  Mag-sail brake
+//                              0.97–1.00  Earth return
 
-function bezier3(t, x0,y0,x1,y1,x2,y2,x3,y3) {
-  const mt = 1-t;
-  return {
-    x: mt*mt*mt*x0 + 3*mt*mt*t*x1 + 3*mt*t*t*x2 + t*t*t*x3,
-    y: mt*mt*mt*y0 + 3*mt*mt*t*y1 + 3*mt*t*t*y2 + t*t*t*y3,
-  };
+function fullPos(t) {
+  if (t < 0.07) return bez(t/0.07, ea.x,ea.y, ea.x-20,ea.y-60, va.x+40,va.y+40, va.x,va.y);
+  if (t < 0.14) return bez((t-0.07)/0.07, va.x,va.y, va.x-15,va.y-10, sun.x+10,sun.y-6, sun.x+8,sun.y-4);
+  if (t < 0.16) return sun;
+  if (t < 0.31) return bez((t-0.16)/0.15, sun.x,sun.y, sun.x+80,sun.y+60, j1.x-60,j1.y-50, j1.x,j1.y);
+  if (t < 0.33) return j1;
+  if (t < 0.45) return bez((t-0.33)/0.12, j1.x,j1.y, j1.x+50,j1.y+70, sun.x+18,sun.y+12, sun.x+7,sun.y+5);
+  if (t < 0.47) return sun;
+  if (t < 0.58) return bez((t-0.47)/0.11, sun.x,sun.y, sun.x-50,sun.y+80, j2.x+50,j2.y-40, j2.x,j2.y);
+  if (t < 0.59) return j2;
+  // Interstellar cruise: j2 → exitPt
+  if (t < 0.67) return bez((t-0.59)/0.08, j2.x,j2.y, j2.x-60,j2.y-60, exitPt.x+30,exitPt.y+30, exitPt.x,exitPt.y);
+  // BH approach: exitPt → p1entry
+  if (t < 0.73) return bez((t-0.67)/0.06, exitPt.x,exitPt.y, exitPt.x+40,exitPt.y-60, p1entry.x-80,p1entry.y-20, p1entry.x,p1entry.y);
+  // BH Pass 1: arc around BH
+  if (t < 0.76) {
+    const u=(t-0.73)/0.03;
+    return { x: bhX+rFly*Math.cos(P1_A0+u*(P1_A1-P1_A0)), y: bhY+rFly*Math.sin(P1_A0+u*(P1_A1-P1_A0)) };
+  }
+  // BH Orbit 1: excursion loop right-then-up back to p2entry
+  if (t < 0.80) return bez((t-0.76)/0.04, p1exit.x,p1exit.y, p1exit.x+80,p1exit.y+70, p2entry.x+80,p2entry.y-70, p2entry.x,p2entry.y);
+  // BH Pass 2
+  if (t < 0.83) {
+    const u=(t-0.80)/0.03;
+    return { x: bhX+rFly*Math.cos(P2_A0+u*(P2_A1-P2_A0)), y: bhY+rFly*Math.sin(P2_A0+u*(P2_A1-P2_A0)) };
+  }
+  // BH Orbit 2: excursion loop up-left and back to p3entry
+  if (t < 0.87) return bez((t-0.83)/0.04, p2exit.x,p2exit.y, p2exit.x-80,p2exit.y-90, p3entry.x-80,p3entry.y-60, p3entry.x,p3entry.y);
+  // BH Pass 3 (wide sweep = 250°, escape trajectory)
+  if (t < 0.91) {
+    const u=(t-0.87)/0.04;
+    return { x: bhX+rFly*Math.cos(P3_A0+u*(P3_A1-P3_A0)), y: bhY+rFly*Math.sin(P3_A0+u*(P3_A1-P3_A0)) };
+  }
+  // Return cruise: p3exit → returnPt (heading back to solar system)
+  if (t < 0.95) return bez((t-0.91)/0.04, p3exit.x,p3exit.y, p3exit.x-40,p3exit.y+50, returnPt.x+80,returnPt.y-30, returnPt.x,returnPt.y);
+  // Mag-sail brake
+  if (t < 0.97) return bez((t-0.95)/0.02, returnPt.x,returnPt.y, returnPt.x+30,returnPt.y+30, cx-70,cy-50, cx-25,cy-15);
+  // Earth return
+  return bez((t-0.97)/0.03, cx-25,cy-15, cx+10,cy-5, ea.x-15,ea.y-15, earthReturn.x,earthReturn.y);
 }
 
 function phaseAt(t) {
-  if (t < 0.08) return 0;
-  if (t < 0.16) return 1;
-  if (t < 0.18) return 2;
-  if (t < 0.20) return 3;
-  if (t < 0.35) return 4;
-  if (t < 0.37) return 5;
-  if (t < 0.52) return 6;
-  if (t < 0.54) return 7;
-  if (t < 0.72) return 8;
-  return 9;
+  if (t < 0.07) return 0;
+  if (t < 0.13) return 1;
+  if (t < 0.15) return 2;
+  if (t < 0.17) return 3;
+  if (t < 0.31) return 4;
+  if (t < 0.33) return 5;
+  if (t < 0.45) return 6;
+  if (t < 0.47) return 7;
+  if (t < 0.59) return 8;
+  if (t < 0.67) return 9;
+  if (t < 0.73) return 10;
+  if (t < 0.76) return 11;
+  if (t < 0.80) return 12;
+  if (t < 0.83) return 13;
+  if (t < 0.87) return 14;
+  if (t < 0.91) return 15;
+  if (t < 0.95) return 16;
+  if (t < 0.97) return 17;
+  return 18;
 }
 
-buildPath();
+// Precompute path
+const NPTS = 2000;
+const PATH = Array.from({length: NPTS+1}, (_,i) => fullPos(i/NPTS));
 
-let progress = 0;
-let running = true;
-let animId;
-let lastPhase = -1;
+// ── STARS ─────────────────────────────────────────────────────────
+const STARS = Array.from({length:220}, (_,i) => ({
+  x: (Math.sin(i*137.508)*0.5+0.5)*W,
+  y: (Math.cos(i*97.314)*0.5+0.5)*H,
+  r: 0.4+Math.abs(Math.sin(i*73))*1.0,
+  a: 0.12+Math.abs(Math.sin(i*53))*0.5
+}));
 
-function drawOrbit(r2, color) {
-  ctx.beginPath();
-  ctx.arc(cx, cy, r2, 0, Math.PI*2);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 0.5;
-  ctx.setLineDash([3,5]);
-  ctx.stroke();
-  ctx.setLineDash([]);
+// ── PARTICLES ─────────────────────────────────────────────────────
+let particles=[];
+function spawnParticles(x,y,col,n=28){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2, s=1.2+Math.random()*3.5;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,col,r:1+Math.random()*2});
+  }
+}
+function tickParticles(){
+  particles=particles.filter(p=>p.life>0);
+  particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vx*=0.91;p.vy*=0.91;p.life-=0.02;});
+}
+function drawParticles(){
+  particles.forEach(p=>{
+    ctx.globalAlpha=Math.max(0,p.life);
+    ctx.fillStyle=p.col;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();
+  });
+  ctx.globalAlpha=1;
 }
 
-function drawPlanet(x, y, radius, color, label) {
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI*2);
-  ctx.fillStyle = color;
-  ctx.fill();
-  ctx.font = '11px sans-serif';
-  ctx.fillStyle = '#9ba8be';
-  ctx.textAlign = 'center';
-  ctx.fillText(label, x, y - radius - 4);
-}
+// ── BH SCENE ─────────────────────────────────────────────────────
+function drawBHScene(prog) {
+  const rs = 14; // display event horizon radius
 
-function drawSun() {
-  ctx.beginPath();
-  ctx.arc(cx, cy, r.sun, 0, Math.PI*2);
-  ctx.fillStyle = '#ffe566';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(cx, cy, r.sun+4, 0, Math.PI*2);
-  ctx.strokeStyle = 'rgba(255,229,102,0.25)';
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  ctx.lineWidth = 1;
-}
-
-function drawTrail() {
-  const len = pathPts.length;
-  const end = Math.floor(progress * len);
-  if (end < 2) return;
-  for (let i = 1; i < end; i++) {
-    const frac = i / len;
-    const a = Math.min(1, (end - i) / 180);
-    const ph = phaseAt(frac);
-    let strokeCol;
-    if (ph <= 1) strokeCol = `rgba(74,158,255,${a})`;
-    else if (ph <= 3) strokeCol = `rgba(255,200,80,${a})`;
-    else if (ph <= 5) strokeCol = `rgba(100,200,140,${a})`;
-    else if (ph <= 7) strokeCol = `rgba(255,200,80,${a})`;
-    else strokeCol = `rgba(200,120,220,${a})`;
+  // Faint arc guides showing upcoming/completed passes
+  function guideArc(a0, a1, col, done) {
     ctx.beginPath();
-    ctx.moveTo(pathPts[i-1].x, pathPts[i-1].y);
-    ctx.lineTo(pathPts[i].x, pathPts[i].y);
-    ctx.strokeStyle = strokeCol;
-    ctx.lineWidth = 1.8;
+    const n=80;
+    for(let i=0;i<=n;i++){
+      const angle=a0+(i/n)*(a1-a0);
+      const x=bhX+rFly*Math.cos(angle), y=bhY+rFly*Math.sin(angle);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = done ? col+'66' : col+'22';
+    ctx.lineWidth = done ? 1.0 : 0.7;
+    ctx.setLineDash([2,3]); ctx.stroke(); ctx.setLineDash([]);
+  }
+
+  if(prog >= 0.67) guideArc(P1_A0, P1_A1, '#ff4422', prog > 0.76);
+  if(prog >= 0.76) guideArc(P2_A0, P2_A1, '#ff6633', prog > 0.83);
+  if(prog >= 0.83) guideArc(P3_A0, P3_A1, '#ffaa22', prog > 0.91);
+
+  // Lensing glow rings
+  for(let ring=4;ring>=1;ring--){
+    const rr=rs*(1.4+ring*0.5);
+    ctx.beginPath();ctx.arc(bhX,bhY,rr,0,Math.PI*2);
+    ctx.strokeStyle=`rgba(180,160,120,${0.04+ring*0.015})`;ctx.lineWidth=1.5;ctx.stroke();
+  }
+  // Photon ring
+  ctx.beginPath();ctx.arc(bhX,bhY,rs*1.5,0,Math.PI*2);
+  ctx.strokeStyle='rgba(220,200,140,0.35)';ctx.lineWidth=1;ctx.stroke();
+  // Event horizon
+  ctx.beginPath();ctx.arc(bhX,bhY,rs,0,Math.PI*2);
+  ctx.fillStyle='#000';ctx.fill();
+  ctx.strokeStyle='rgba(200,180,100,0.2)';ctx.lineWidth=0.5;ctx.stroke();
+  // ISCO ring (periapsis target)
+  ctx.beginPath();ctx.arc(bhX,bhY,rFly,0,Math.PI*2);
+  ctx.setLineDash([3,5]);ctx.strokeStyle='rgba(255,80,60,0.25)';ctx.lineWidth=0.7;ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Labels
+  ctx.font='bold 11px sans-serif';ctx.fillStyle='#cc4466';ctx.textAlign='center';
+  ctx.fillText('Gaia BH1',bhX,bhY-rs-14);
+  ctx.font='9px sans-serif';ctx.fillStyle='#4a2a40';
+  ctx.fillText('9.62 M☉  ·  r_s ≈ 28 km',bhX,bhY-rs-4);
+  ctx.fillStyle='rgba(255,80,60,0.4)';ctx.textAlign='left';
+  ctx.fillText('ISCO (3r_s)',bhX+rFly+3,bhY-4);
+
+  // Pass labels when passes are completed
+  if(prog > 0.76){
+    ctx.font='9px sans-serif';ctx.fillStyle='#ff4422aa';ctx.textAlign='left';
+    ctx.fillText('①',bhX+rFly*Math.cos((P1_A0+P1_A1)/2)-4, bhY+rFly*Math.sin((P1_A0+P1_A1)/2)+4);
+  }
+  if(prog > 0.83){
+    ctx.fillStyle='#ff6633aa';
+    ctx.fillText('②',bhX+rFly*Math.cos((P2_A0+P2_A1)/2)-4, bhY+rFly*Math.sin((P2_A0+P2_A1)/2)+4);
+  }
+  if(prog > 0.91){
+    ctx.fillStyle='#ffaa22aa';
+    ctx.fillText('③',bhX+rFly*Math.cos((P3_A0+P3_A1)/2)-4, bhY+rFly*Math.sin((P3_A0+P3_A1)/2)+4);
+  }
+}
+
+// ── DRAW HELPERS ─────────────────────────────────────────────────
+function drawOrbitRing(r,col){
+  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);
+  ctx.strokeStyle=col;ctx.lineWidth=0.5;
+  ctx.setLineDash([3,5]);ctx.stroke();ctx.setLineDash([]);
+}
+function drawPlanet(x,y,r,col,label,lo){
+  const g=ctx.createRadialGradient(x,y,0,x,y,r*4);
+  g.addColorStop(0,col+'44');g.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r*4,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
+  if(label){ctx.font='10px sans-serif';ctx.fillStyle='#6a8aaa';ctx.textAlign='center';ctx.fillText(label,x,y-r-(lo||5));}
+}
+function drawSun(){
+  for(let i=3;i>=1;i--){
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,14+i*9);
+    g.addColorStop(0,'rgba(255,230,100,0.13)');g.addColorStop(1,'rgba(255,180,0,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,14+i*9,0,Math.PI*2);ctx.fill();
+  }
+  ctx.beginPath();ctx.arc(cx,cy,10,0,Math.PI*2);ctx.fillStyle='#ffe566';ctx.fill();
+  ctx.font='10px sans-serif';ctx.fillStyle='#c8a030';ctx.textAlign='center';
+  ctx.fillText('Sun',cx,cy+21);
+}
+
+function drawTrail(prog){
+  const end=Math.floor(prog*NPTS);
+  if(end<2) return;
+  for(let i=1;i<end;i++){
+    const frac=i/NPTS;
+    const ph=phaseAt(frac);
+    const fade=Math.min(1,(end-i)/300);
+    ctx.beginPath();
+    ctx.moveTo(PATH[i-1].x,PATH[i-1].y);
+    ctx.lineTo(PATH[i].x,PATH[i].y);
+    const hex=Math.round(fade*255).toString(16).padStart(2,'0');
+    // BH passes get extra thickness
+    ctx.lineWidth = (ph===11||ph===13||ph===15) ? 3 : 2;
+    ctx.strokeStyle=PHASES[ph].col+hex;
     ctx.stroke();
   }
 }
 
-function drawCraft() {
-  const idx = Math.floor(progress * (pathPts.length-1));
-  const p = pathPts[idx];
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, 3.5, 0, Math.PI*2);
-  ctx.fillStyle = '#ffffff';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, 6, 0, Math.PI*2);
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+function drawCraft(prog){
+  const idx=Math.min(NPTS,Math.floor(prog*NPTS));
+  const p=PATH[idx];
+  const ph=phaseAt(prog);
+  const isBH=(ph>=11&&ph<=15);
+  // Outer glow during BH passes
+  if(isBH){
+    ctx.beginPath();ctx.arc(p.x,p.y,10,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,80,40,0.15)';ctx.lineWidth=2;ctx.stroke();
+  }
+  ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);
+  ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=1;ctx.stroke();
+  ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);
+  ctx.fillStyle='#ffffff';ctx.fill();
 }
 
-function drawManeuverMarkers() {
-  const markers = [
-    { t:0.175, label:'Oberth #1', col:'#ffe566' },
-    { t:0.36,  label:'Jupiter GA 1', col:'#c8a97a' },
-    { t:0.535, label:'Oberth #2', col:'#ffe566' },
-    { t:0.73,  label:'Jupiter GA 2', col:'#c8a97a' },
+function drawMagSailAnnotation(prog){
+  if(prog<0.95||prog>0.97) return;
+  const idx=Math.floor(prog*NPTS);
+  const p=PATH[idx];
+  const u=(prog-0.95)/0.02;
+  const sailR=8+u*28;
+  ctx.beginPath();ctx.arc(p.x,p.y,sailR,0,Math.PI*2);
+  ctx.strokeStyle=`rgba(170,255,200,${0.5-u*0.3})`;ctx.lineWidth=1.5;ctx.stroke();
+  ctx.font='10px sans-serif';ctx.fillStyle='rgba(170,255,200,0.6)';ctx.textAlign='left';
+  ctx.fillText('Magnetic sail braking',p.x+sailR+6,p.y);
+}
+
+function drawMarkers(prog){
+  const marks=[
+    {t:0.15,  label:'Oberth #1 🔥',      col:'#ffe566'},
+    {t:0.31,  label:'Jupiter GA 1',       col:'#c8a97a'},
+    {t:0.45,  label:'Oberth #2 🔥',      col:'#ffe566'},
+    {t:0.59,  label:'Jupiter GA 2',       col:'#c8a97a'},
+    {t:0.745, label:'BH Pass 1 ⚫🔥',    col:'#ff4422'},
+    {t:0.815, label:'BH Pass 2 ⚫🔥',    col:'#ff6633'},
+    {t:0.89,  label:'BH Pass 3 ⚫🔥',    col:'#ffaa22'},
   ];
-  markers.forEach(m => {
-    if (progress < m.t - 0.01) return;
-    const idx = Math.floor(m.t * (pathPts.length-1));
-    const p = pathPts[idx];
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 7, 0, Math.PI*2);
-    ctx.strokeStyle = m.col;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    if (progress >= m.t) {
-      ctx.font = '10px sans-serif';
-      ctx.fillStyle = m.col;
-      ctx.textAlign = 'left';
-      ctx.fillText(m.label, p.x+10, p.y-4);
+  marks.forEach(m=>{
+    if(prog<m.t-0.02) return;
+    const idx=Math.floor(m.t*NPTS);
+    const p=PATH[idx];
+    ctx.beginPath();ctx.arc(p.x,p.y,7,0,Math.PI*2);
+    ctx.strokeStyle=m.col+'88';ctx.lineWidth=1.2;ctx.stroke();
+    if(prog>m.t){
+      ctx.font='10px sans-serif';ctx.fillStyle=m.col;ctx.textAlign='left';
+      ctx.fillText(m.label,p.x+10,p.y-3);
     }
   });
 }
 
-function draw() {
-  ctx.clearRect(0, 0, W, H);
-  ctx.fillStyle = '#07090f';
-  ctx.fillRect(0,0,W,H);
+function drawScaleBar(){
+  const bx=W-110,by=H-14;
+  ctx.strokeStyle='rgba(60,100,160,0.35)';ctx.lineWidth=0.5;
+  ctx.beginPath();ctx.moveTo(bx,by);ctx.lineTo(bx+AU,by);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(bx,by-3);ctx.lineTo(bx,by+3);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(bx+AU,by-3);ctx.lineTo(bx+AU,by+3);ctx.stroke();
+  ctx.font='10px sans-serif';ctx.fillStyle='rgba(60,100,160,0.4)';
+  ctx.textAlign='center';ctx.fillText('1 AU',bx+AU/2,by-5);
+}
 
-  for (let i = 0; i < 120; i++) {
-    const sx = (Math.sin(i*137.5)*0.5+0.5)*W;
-    const sy = (Math.cos(i*97.3)*0.5+0.5)*H;
-    const sa = 0.2 + Math.sin(i*31)*0.3;
-    ctx.beginPath();
-    ctx.arc(sx, sy, 0.8, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(255,255,255,${sa})`;
-    ctx.fill();
+// ── SPEED INTERPOLATION ──────────────────────────────────────────
+const T_STARTS=[0, 0.07,0.13,0.15,0.17,0.31,0.33,0.45,0.47,0.59,0.67,0.73,0.76,0.80,0.83,0.87,0.91,0.95,0.97];
+const T_ENDS  =[0.07,0.13,0.15,0.17,0.31,0.33,0.45,0.47,0.59,0.67,0.73,0.76,0.80,0.83,0.87,0.91,0.95,0.97,1.00];
+
+function getSpeed(t){
+  const ph=phaseAt(t);
+  const lo=T_STARTS[ph]||0, hi=T_ENDS[ph]||1;
+  const u=hi>lo?(t-lo)/(hi-lo):0;
+  const a=PHASES[ph].speed;
+  const b=PHASES[Math.min(ph+1,PHASES.length-1)].speed;
+  return a+(b-a)*u;
+}
+
+// ── UI UPDATE ────────────────────────────────────────────────────
+let lastPhase=-1;
+function updateUI(t){
+  const spd=getSpeed(t);
+  const pct=(spd/299792*100);
+  document.getElementById('prog-bar').style.width=(t*100).toFixed(1)+'%';
+
+  const ph=phaseAt(t);
+  const isBH=(ph>=11&&ph<=15);
+  const isPass=(ph===11||ph===13||ph===15);
+
+  // Speed display: show %c when > 3000 km/s
+  if(spd > 3000){
+    document.getElementById('gaugeSpd').textContent=pct.toFixed(2);
+    document.getElementById('gaugeUnit').textContent='% of c';
+    document.getElementById('gaugePct').textContent=Math.round(spd).toLocaleString()+' km/s';
+  } else {
+    document.getElementById('gaugeSpd').textContent=Math.round(spd).toLocaleString();
+    document.getElementById('gaugeUnit').textContent='km/s';
+    document.getElementById('gaugePct').textContent=pct.toFixed(3)+'% of c';
   }
 
-  drawOrbit(orb.venus,   'rgba(232,197,107,0.25)');
-  drawOrbit(orb.earth,   'rgba(74,158,255,0.25)');
-  drawOrbit(orb.mars,    'rgba(212,97,58,0.2)');
-  drawOrbit(orb.jupiter, 'rgba(200,169,122,0.2)');
+  // BH pass HUD
+  const obEl=document.getElementById('hud-oberth');
+  if(isPass){
+    obEl.style.display='block';
+    const passNum=ph===11?1:ph===13?2:3;
+    const vFrom=ph===11?380:ph===13?4200:5900;
+    const vTo  =ph===11?4200:ph===13?5900:7200;
+    document.getElementById('hudPassNum').textContent=passNum;
+    document.getElementById('hudVinf').textContent=vFrom.toLocaleString();
+    document.getElementById('hudVout').textContent=vTo.toLocaleString();
+  } else {
+    obEl.style.display='none';
+  }
 
-  const ea = -Math.PI*0.15;
-  const va = -Math.PI*0.55;
-  const j1a = Math.PI*0.25;
-  const j2a = Math.PI*0.85;
+  const distVals=[1.0,0.72,0.15,0.05,5.2,5.2,0.05,0.05,5.2,'—','—','—','—','—','—','—','—','—',1.0];
+  const yrMap=[0,0.45,0.65,0.67,1.0,2.7,3.5,3.52,5.5,7.0,'~1.2M','~1.2M','~1.2M','~1.2M','~1.2M','~1.2M','~1.2M','~2.4M','~2.4M'];
+  const dv=distVals[ph];
+  document.getElementById('hudDist').textContent=dv==='—'?'—':dv+' AU';
+  document.getElementById('hudYear').textContent=yrMap[ph];
+  document.getElementById('hudPhase').innerHTML='Phase: <b>'+PHASES[ph].name+'</b>';
 
-  drawTrail();
-  drawManeuverMarkers();
+  if(ph!==lastPhase){
+    lastPhase=ph;
+    const p=PHASES[ph];
+    document.getElementById('phaseLbl').textContent=p.name;
+    document.getElementById('phNum').textContent=String(ph+1).padStart(2,'0');
+    document.getElementById('phTitle').textContent=p.title;
+    document.getElementById('phDesc').textContent=p.desc;
+    PHASES.forEach((_,i)=>{
+      const d=document.getElementById('tl'+i);
+      if(!d)return;
+      const isBHdot=(i>=11&&i<=15);
+      d.className='tl-dot'+(isBHdot?' bh':'')+(i<ph?' done':i===ph?' active':'');
+    });
+    // Gauge color
+    const colMap={'#ffe566':'#e0b020','#44ccaa':'#44ccaa','#4a9eff':'#44aaff',
+                  '#cc55ff':'#cc55ff','#ff6644':'#ff4433','#ff3322':'#ff3300',
+                  '#ffaa22':'#ffaa22','#ff8855':'#ff8844','#44aaff':'#44aaff','#aaffcc':'#44ffaa'};
+    document.getElementById('gaugeSpd').style.color=colMap[p.col]||'#4af0a8';
+  }
+}
 
+// ── MAIN LOOP ────────────────────────────────────────────────────
+let progress=0, playing=true;
+let prevO1=false, prevO2=false;
+let prevB1=false, prevB2=false, prevB3=false;
+
+function loop(){
+  const SPEED=0.00036;
+  if(playing){
+    progress=Math.min(1,progress+SPEED);
+    if(progress>=1){ playing=false; document.getElementById('btnPlay').textContent='▶ Play'; }
+  }
+
+  // Particles at solar Oberth events
+  const isO1=progress>0.145&&progress<0.17;
+  const isO2=progress>0.445&&progress<0.47;
+  if(isO1&&!prevO1) spawnParticles(cx,cy,'#ffe566',32);
+  if(isO2&&!prevO2) spawnParticles(cx,cy,'#ffaa33',32);
+  prevO1=isO1; prevO2=isO2;
+  if(Math.random()<0.1&&(isO1||isO2)) spawnParticles(cx+(Math.random()-.5)*10,cy+(Math.random()-.5)*10,'#ffe566',3);
+
+  // Particles at each BH periapsis
+  const isB1=progress>0.73&&progress<0.76;
+  const isB2=progress>0.80&&progress<0.83;
+  const isB3=progress>0.87&&progress<0.91;
+  if(isB1&&!prevB1) spawnParticles(bhX,bhY,'#ff4422',50);
+  if(isB2&&!prevB2) spawnParticles(bhX,bhY,'#ff6633',50);
+  if(isB3&&!prevB3) spawnParticles(bhX,bhY,'#ffaa22',60);
+  prevB1=isB1; prevB2=isB2; prevB3=isB3;
+  if(Math.random()<0.12&&(isB1||isB2||isB3)){
+    spawnParticles(bhX+(Math.random()-.5)*12,bhY+(Math.random()-.5)*12,'#ff5533',4);
+  }
+  tickParticles();
+
+  // Draw
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#02030d';ctx.fillRect(0,0,W,H);
+  STARS.forEach(s=>{ctx.globalAlpha=s.a;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();});
+  ctx.globalAlpha=1;
+
+  drawOrbitRing(orb.venus,  'rgba(232,197,107,0.18)');
+  drawOrbitRing(orb.earth,  'rgba(74,158,255,0.18)');
+  drawOrbitRing(orb.mars,   'rgba(212,97,58,0.12)');
+  drawOrbitRing(orb.jupiter,'rgba(200,169,122,0.15)');
+
+  if(progress>0.67) drawBHScene(progress);
+  drawTrail(progress);
+  drawMarkers(progress);
+  drawParticles();
+  drawMagSailAnnotation(progress);
   drawSun();
-  drawPlanet(cx + orb.venus*Math.cos(va),   cy + orb.venus*Math.sin(va),   r.venus,   col.venus,   'Venus');
-  drawPlanet(cx + orb.earth*Math.cos(ea),   cy + orb.earth*Math.sin(ea),   r.earth,   col.earth,   'Earth');
-  drawPlanet(cx + orb.jupiter*Math.cos(j1a),cy + orb.jupiter*Math.sin(j1a),r.jupiter, col.jupiter, 'Jupiter');
-  drawPlanet(cx + orb.jupiter*Math.cos(j2a),cy + orb.jupiter*Math.sin(j2a),r.jupiter*.7, col.jupiter, '');
 
-  drawCraft();
+  drawPlanet(cx+orb.venus*Math.cos(-1.7),cy+orb.venus*Math.sin(-1.7),4,'#e8c56b','Venus',6);
+  drawPlanet(ea.x,ea.y,5,'#4a9eff','Earth',6);
+  drawPlanet(cx+orb.mars*Math.cos(1.2),cy+orb.mars*Math.sin(1.2),3.5,'#d4613a','Mars',6);
+  drawPlanet(j1.x,j1.y,12,'#c8a97a','Jupiter',8);
+  drawPlanet(j2.x,j2.y,12,'#c8a97a','',0);
+  ctx.font='10px sans-serif';ctx.fillStyle='#5a6a7a';ctx.textAlign='center';
+  ctx.fillText('Jupiter',j2.x,j2.y-18);
 
-  ctx.font = '10px sans-serif';
-  ctx.fillStyle = 'rgba(155,168,190,0.6)';
-  ctx.textAlign = 'left';
-  ctx.fillText('Scale compressed — orbits not to true proportion', 10, H-10);
+  if(progress>0) drawCraft(progress);
+  drawScaleBar();
+  updateUI(progress);
+  requestAnimationFrame(loop);
 }
 
-function updateUI() {
-  const ph = phaseAt(progress);
-  if (ph !== lastPhase) {
-    lastPhase = ph;
-    const p = phases[ph];
-    document.getElementById('phaseName').textContent  = p.name;
-    document.getElementById('phaseTitle').textContent = p.title;
-    document.getElementById('phaseDesc').textContent  = p.desc;
-    document.getElementById('spdVal').textContent     = p.speed;
-  }
-}
-
-function loop() {
-  if (running) {
-    progress = Math.min(1, progress + 0.0008);
-    if (progress >= 1) { running = false; document.getElementById('btnPlay').textContent = 'Play'; }
-  }
-  draw();
-  updateUI();
-  animId = requestAnimationFrame(loop);
-}
-
-document.getElementById('btnPlay').onclick = function() {
-  running = !running;
-  this.textContent = running ? 'Pause' : 'Play';
-  if (running && progress >= 1) { progress = 0; lastPhase = -1; }
+// ── CONTROLS ─────────────────────────────────────────────────────
+document.getElementById('btnPlay').onclick=function(){
+  if(!playing&&progress>=1){ progress=0;lastPhase=-1;playing=true;this.textContent='⏸ Pause';return; }
+  playing=!playing;
+  this.textContent=playing?'⏸ Pause':'▶ Play';
 };
-document.getElementById('btnReset').onclick = function() {
-  progress = 0; lastPhase = -1; running = true;
-  document.getElementById('btnPlay').textContent = 'Pause';
+document.getElementById('btnReset').onclick=function(){
+  progress=0;lastPhase=-1;playing=true;
+  prevO1=false;prevO2=false;prevB1=false;prevB2=false;prevB3=false;
+  particles=[];
+  document.getElementById('btnPlay').textContent='⏸ Pause';
 };
 
 loop();
 </script>
+</body>
+</html>
